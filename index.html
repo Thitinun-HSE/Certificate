@@ -200,7 +200,7 @@ textarea{font:12px var(--mono);height:130px}
       <label for="in-code">รหัสพนักงานของคุณ</label>
       <div class="search">
         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="M20 20l-4-4"/></svg>
-        <input id="in-code" required placeholder="เช่น NTC-1024" enterkeyhint="search" autocapitalize="characters">
+        <input id="in-code" required placeholder="เช่น 980XXXXX" enterkeyhint="search" inputmode="numeric" autocomplete="off">
       </div>
       <div id="me-msg" hidden></div>
       <button class="btn btn-pri btn-big" id="btn-me" type="submit">ดู Cert ของฉัน</button>
@@ -412,9 +412,10 @@ $("#f-me").addEventListener("submit",async e=>{
 });
 function initials(n){const w=String(n).trim().split(/\s+/);return(w[0]?.[0]||"")+(w[1]?.[0]||"")}
 const reg=d=>{REG.push(d);return REG.length-1};
+const fname=d=>esc((docTitle(d)+"_"+CURRENT.p.code).replace(/[\\/:*?"<>|\s]+/g,"_")+"."+extOf(d.file.mime));
 const docBtns=(d,full)=>{if(!d||!d.file)return"";const i=reg(d);return full
-  ?`<div class="cact"><button class="btn btn-soft" data-a="view" data-x="${i}">${ui("eye")} ดู</button><button class="btn btn-soft" data-a="print" data-x="${i}">${ui("print")} พิมพ์</button><a class="btn btn-soft" data-a="save" href="${blobUrl(d.file)}" download="${esc(docTitle(d).replace(/[\\/:*?"<>| ]+/g,"_"))}_${esc(CURRENT.p.code)}.${extOf(d.file.mime)}">${ui("save")} บันทึก</a></div><div class="viewer" id="vw-${i}" hidden></div>`
-  :`<div class="mini"><button class="btn btn-soft btn-sm" data-a="view" data-x="${i}" aria-label="ดู">${ui("eye",16)}</button><button class="btn btn-soft btn-sm" data-a="print" data-x="${i}" aria-label="พิมพ์">${ui("print",16)}</button></div><div class="viewer full" id="vw-${i}" hidden></div>`};
+  ?`<div class="cact"><button class="btn btn-soft" data-a="view" data-x="${i}">${ui("eye")} ดู</button><button class="btn btn-soft" data-a="print" data-x="${i}">${ui("print")} พิมพ์</button><a class="btn btn-soft" data-a="save" href="${blobUrl(d.file)}" download="${fname(d)}">${ui("save")} บันทึก</a></div><div class="viewer" id="vw-${i}" hidden></div>`
+  :`<div class="mini"><button class="btn btn-soft btn-sm" data-a="view" data-x="${i}" aria-label="ดู">${ui("eye",16)}</button><button class="btn btn-soft btn-sm" data-a="print" data-x="${i}" aria-label="พิมพ์">${ui("print",16)}</button><a class="btn btn-soft btn-sm" data-a="save" data-x="${i}" aria-label="บันทึก" href="${blobUrl(d.file)}" download="${fname(d)}">${ui("save",16)}</a></div><div class="viewer full" id="vw-${i}" hidden></div>`};
 function qualCard(e){
   const set=e.items.map(i=>i.d).filter(isImg);const si=SETS.push(set)-1;
   return`<article class="cert"><div class="chead"><div class="ico s-${e.k}">${svg(e.Q.icon)}</div><div class="stack" style="gap:3px"><span class="kick">สิทธิ์ทำงาน</span><h3>${esc(e.Q.label)}</h3><div><span class="pill s-${e.k}">${QTXT[e.k]}</span></div></div>${countdown(e.first)}</div>
@@ -436,7 +437,7 @@ function renderMe(p){
   const el=$("#me-result");
   el.innerHTML=`<div class="idcard"><div class="idtop"><div class="avatar">${esc(initials(p.name))}</div><div><div class="idname">${esc(p.name)}</div><div class="idsub">${esc(p.company)}${p.position?" · "+esc(p.position):""}${p.resigned?" · ลาออกแล้ว":""}</div><div class="idcode">${esc(p.code)}</div></div></div>
     <div class="tally"><div><b>${n("ok")}</b><span>พร้อม/ใช้ได้</span></div><div><b>${n("warn")}</b><span>ใกล้หมด</span></div><div><b>${n("bad")}</b><span>ห้าม/หมดแล้ว</span></div></div>
-    <div class="idactions">${all.length>1?`<button class="btn btn-hv btn-sm" data-set="${ai}">${ui("print")} พิมพ์ทุกใบ (${all.length})</button>`:""}<button class="btn btn-ghost btn-sm" id="btn-out">ค้นหารหัสอื่น</button></div></div>
+    <div class="idactions">${all.length>1?`<button class="btn btn-hv btn-sm" data-set="${ai}">${ui("print")} พิมพ์ทุกใบ (${all.length})</button><button class="btn btn-ghost btn-sm" data-saveall="${ai}">${ui("save")} บันทึกทุกใบ</button>`:""}<button class="btn btn-ghost btn-sm" id="btn-out">ค้นหารหัสอื่น</button></div></div>
   ${quals.length?`<div class="sec">สิทธิ์ทำงานตามกฎหมาย</div><div class="list">${quals.map(qualCard).join("")}</div>`:""}
   ${gens.length?`<div class="sec">ใบรับรองการอบรม</div><div class="list">${gens.map(certCard).join("")}</div>`:""}
   ${!quals.length&&!gens.length?`<div class="card empty">ยังไม่มีเอกสารในระบบ</div>`:""}`;
@@ -449,6 +450,7 @@ function renderMe(p){
     if(a==="print")printDocs([d]);
   }));
   el.querySelectorAll("[data-set]").forEach(b=>b.onclick=()=>printDocs(SETS[+b.dataset.set]));
+  el.querySelectorAll("[data-saveall]").forEach(b=>b.onclick=()=>{const list=SETS[+b.dataset.saveall];list.forEach((d,k)=>setTimeout(()=>{const a=document.createElement("a");a.href=blobUrl(d.file);a.download=fname(d).replace(/&amp;/g,"&");document.body.appendChild(a);a.click();a.remove()},k*600));toast(DEMO?"หน้าตัวอย่างบันทึกไม่ได้ ใช้ได้บนเว็บจริง":"กำลังบันทึก "+list.length+" ไฟล์ ถ้าเบราว์เซอร์ถาม ให้กดอนุญาต")});
   $("#btn-out").onclick=()=>{el.hidden=true;el.innerHTML="";$("#f-me").hidden=false;$("#in-code").value="";$("#in-code").focus()};
 }
 function printDocs(list){
