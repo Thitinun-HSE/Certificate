@@ -165,6 +165,7 @@ textarea{font:12px var(--mono);height:130px}
 .viewer.full{grid-column:1/-1}
 .sm{font-size:.84rem}
 .law{font-size:.74rem;color:var(--muted);border-top:1px dashed var(--line);padding-top:8px;line-height:1.5}
+.namebtn{background:none;border:0;padding:0;font:inherit;font-weight:700;color:var(--accent);cursor:pointer;text-align:left;text-decoration:underline;text-underline-offset:3px}
 /* print */
 .print-only{display:none}
 @media print{
@@ -428,30 +429,30 @@ function certCard(c){const st=dstatus(c);const k=st.k;return`<article class="cer
   <div class="chead"><div class="ico s-${k}">${svg(iconKey(c.type))}</div><div class="stack" style="gap:3px"><h3>${esc(c.type)}</h3><div><span class="pill s-${k}">${st.t}</span></div></div>${countdown(st)}</div>
   <div class="facts"><span><em>เลขที่</em><b>${esc(c.no||"—")}</b></span><span><em>วันที่ออก</em><b>${thDate(c.issued)}</b></span><span><em>วันหมดอายุ</em><b>${thDate(c.expires)}</b></span></div>
   ${c.file?docBtns(c,true):`<div class="muted sm">ยังไม่มีไฟล์ ติดต่อเจ้าหน้าที่ Safety</div>`}</article>`}
-function renderMe(p){
+function renderMe(p,box){
   REG=[];SETS=[];CURRENT={p};
   const quals=personQuals(p).map(q=>evalQual(p,q)).sort((a,b)=>RANK[a.k]-RANK[b.k]);
   const gens=generalCerts(p).sort((a,b)=>RANK[dstatus(a).k]-RANK[dstatus(b).k]||(dstatus(a).d??1e9)-(dstatus(b).d??1e9));
   const ks=[...quals.map(e=>e.k),...gens.map(c=>{const k=dstatus(c).k;return k==="none"?"ok":k})];const n=k=>ks.filter(x=>x===k).length;
   const all=p.docs.filter(isImg);const ai=SETS.push(all)-1;
-  const el=$("#me-result");
+  const el=box||$("#me-result");
   el.innerHTML=`<div class="idcard"><div class="idtop"><div class="avatar">${esc(initials(p.name))}</div><div><div class="idname">${esc(p.name)}</div><div class="idsub">${esc(p.company)}${p.position?" · "+esc(p.position):""}${p.resigned?" · ลาออกแล้ว":""}</div><div class="idcode">${esc(p.code)}</div></div></div>
     <div class="tally"><div><b>${n("ok")}</b><span>พร้อม/ใช้ได้</span></div><div><b>${n("warn")}</b><span>ใกล้หมด</span></div><div><b>${n("bad")}</b><span>ห้าม/หมดแล้ว</span></div></div>
-    <div class="idactions">${all.length>1?`<button class="btn btn-hv btn-sm" data-set="${ai}">${ui("print")} พิมพ์ทุกใบ (${all.length})</button><button class="btn btn-ghost btn-sm" data-saveall="${ai}">${ui("save")} บันทึกทุกใบ</button>`:""}<button class="btn btn-ghost btn-sm" id="btn-out">ค้นหารหัสอื่น</button></div></div>
+    <div class="idactions">${all.length>1?`<button class="btn btn-hv btn-sm" data-set="${ai}">${ui("print")} พิมพ์ทุกใบ (${all.length})</button><button class="btn btn-ghost btn-sm" data-saveall="${ai}">${ui("save")} บันทึกทุกใบ</button>`:""}<button class="btn btn-ghost btn-sm btn-out">${box?"ปิด":"ค้นหารหัสอื่น"}</button></div></div>
   ${quals.length?`<div class="sec">สิทธิ์ทำงานตามกฎหมาย</div><div class="list">${quals.map(qualCard).join("")}</div>`:""}
   ${gens.length?`<div class="sec">ใบรับรองการอบรม</div><div class="list">${gens.map(certCard).join("")}</div>`:""}
   ${!quals.length&&!gens.length?`<div class="card empty">ยังไม่มีเอกสารในระบบ</div>`:""}`;
-  el.hidden=false;$("#f-me").hidden=true;scrollTo(0,0);
+  if(!box){el.hidden=false;$("#f-me").hidden=true;scrollTo(0,0)}
   el.querySelectorAll("[data-a]").forEach(b=>b.addEventListener("click",ev=>{
     const a=b.dataset.a,i=+b.dataset.x,d=REG[i];
     if(a==="save"){if(DEMO)toast("ถ้ากดแล้วไม่มีอะไรเกิดขึ้น ให้กดค้างที่รูปแล้วเลือกบันทึกรูป");return}
     ev.preventDefault();
-    if(a==="view"){const v=$("#vw-"+i);const open=v.hidden;if(open&&!v.innerHTML)v.innerHTML=d.file.mime==="application/pdf"?`<a class="btn btn-pri" href="${blobUrl(d.file)}" target="_blank" rel="noopener">เปิดไฟล์ PDF</a>`:`<img src="${blobUrl(d.file)}" alt="${esc(docTitle(d))}">`;v.hidden=!open;b.classList.toggle("on",open)}
+    if(a==="view"){const v=el.querySelector("#vw-"+i);const open=v.hidden;if(open&&!v.innerHTML)v.innerHTML=d.file.mime==="application/pdf"?`<a class="btn btn-pri" href="${blobUrl(d.file)}" target="_blank" rel="noopener">เปิดไฟล์ PDF</a>`:`<img src="${blobUrl(d.file)}" alt="${esc(docTitle(d))}">`;v.hidden=!open;b.classList.toggle("on",open)}
     if(a==="print")printDocs([d]);
   }));
   el.querySelectorAll("[data-set]").forEach(b=>b.onclick=()=>printDocs(SETS[+b.dataset.set]));
   el.querySelectorAll("[data-saveall]").forEach(b=>b.onclick=()=>{const list=SETS[+b.dataset.saveall];list.forEach((d,k)=>setTimeout(()=>{const a=document.createElement("a");a.href=blobUrl(d.file);a.download=fname(d).replace(/&amp;/g,"&");document.body.appendChild(a);a.click();a.remove()},k*600));toast(DEMO?"หน้าตัวอย่างบันทึกไม่ได้ ใช้ได้บนเว็บจริง":"กำลังบันทึก "+list.length+" ไฟล์ ถ้าเบราว์เซอร์ถาม ให้กดอนุญาต")});
-  $("#btn-out").onclick=()=>{el.hidden=true;el.innerHTML="";$("#f-me").hidden=false;$("#in-code").value="";$("#in-code").focus()};
+  el.querySelector(".btn-out").onclick=box?closeSheet:()=>{el.hidden=true;el.innerHTML="";$("#f-me").hidden=false;$("#in-code").value="";$("#in-code").focus()};
 }
 function printDocs(list){
   if(list.length===1&&list[0].file.mime==="application/pdf"){window.open(blobUrl(list[0].file),"_blank");toast("เปิดไฟล์ PDF แล้ว สั่งพิมพ์จากหน้าที่เปิดขึ้นมา");return}
@@ -488,10 +489,11 @@ function renderAdmin(){
   if(q)list=list.filter(r=>(r.x.p.name+" "+r.x.p.company+" "+r.x.p.code).toLowerCase().includes(q));
   list.sort((a,b)=>RANK[a.k]-RANK[b.k]||(a.d??1e9)-(b.d??1e9));
   const lab={ok:"พร้อม",warn:"ใกล้หมด",bad:"ห้ามทำงาน"};
-  $("#tbl").innerHTML=`<div class="tr th"><span>ชื่อ</span><span class="c2">งาน / หลักสูตร</span><span class="c3">รายละเอียด</span><span>สถานะ</span></div>`+(list.length?list.map(r=>`<div class="tr"><span><b>${esc(r.x.p.name)}</b><br><span class="muted" style="font-size:.8rem">${esc(r.x.p.code)} · ${esc(r.x.p.company)}</span></span><span class="c2">${r.qual?"<b>"+esc(r.label)+"</b>":esc(r.label)}</span><span class="c3 sm">${esc(r.detail)}</span><span style="text-align:right"><span class="pill s-${r.k}">${r.qual?lab[r.k]:r.k==="bad"?"หมดแล้ว":r.k==="warn"?"ใกล้หมด":"ใช้ได้"}</span></span></div>`).join(""):`<div class="empty">${FILTER==="follow"?"ไม่มีรายการที่ต้องติดตาม":"ไม่พบรายการ"}</div>`);
+  $("#tbl").innerHTML=`<div class="tr th"><span>ชื่อ</span><span class="c2">งาน / หลักสูตร</span><span class="c3">รายละเอียด</span><span>สถานะ</span></div>`+(list.length?list.map(r=>`<div class="tr"><span><button type="button" class="namebtn" data-pv="${esc(r.x.rec.id)}">${esc(r.x.p.name)}</button><br><span class="muted" style="font-size:.8rem">${esc(r.x.p.code)} · ${esc(r.x.p.company)}</span></span><span class="c2">${r.qual?"<b>"+esc(r.label)+"</b>":esc(r.label)}</span><span class="c3 sm">${esc(r.detail)}</span><span style="text-align:right"><span class="pill s-${r.k}">${r.qual?lab[r.k]:r.k==="bad"?"หมดแล้ว":r.k==="warn"?"ใกล้หมด":"ใช้ได้"}</span></span></div>`).join(""):`<div class="empty">${FILTER==="follow"?"ไม่มีรายการที่ต้องติดตาม":"ไม่พบรายการ"}</div>`);
   const ps=[...ADMIN.people].sort((a,b)=>a.p.name.localeCompare(b.p.name,"th"));$("#pcount").textContent="("+ps.length+" คน)";
-  $("#plist").innerHTML=ps.length?ps.map(x=>{const mine=rows.filter(r=>r.x===x).sort((a,b)=>RANK[a.k]-RANK[b.k]);const w=mine[0];const ql=personQuals(x.p).map(q=>QUALS[q].label);return`<div class="prow"><div><b>${esc(x.p.name)}</b> <span class="mono muted" style="font-size:.82rem">${esc(x.p.code)}</span><div class="muted" style="font-size:.82rem">${x.p.resigned?'<span class="pill s-none">ลาออก</span> ':""}${esc(x.p.position||x.p.company)} · ${x.p.docs.length} เอกสาร${ql.length?" · "+esc(ql.join(", ")):""} ${w&&(w.k==="warn"||w.k==="bad")?`<span class="pill s-${w.k}">${w.qual?lab[w.k]:w.k==="bad"?"มีใบหมดอายุ":"ใกล้หมด"}</span>`:""}</div></div><button class="btn btn-ghost btn-sm" data-edit="${esc(x.rec.id)}">แก้ไข</button></div>`}).join(""):`<div class="empty">ยังไม่มีรายชื่อ กด “+ เพิ่มช่าง” เพื่อเริ่ม</div>`;
+  $("#plist").innerHTML=ps.length?ps.map(x=>{const mine=rows.filter(r=>r.x===x).sort((a,b)=>RANK[a.k]-RANK[b.k]);const w=mine[0];const ql=personQuals(x.p).map(q=>QUALS[q].label);return`<div class="prow"><div><b>${esc(x.p.name)}</b> <span class="mono muted" style="font-size:.82rem">${esc(x.p.code)}</span><div class="muted" style="font-size:.82rem">${x.p.resigned?'<span class="pill s-none">ลาออก</span> ':""}${esc(x.p.position||x.p.company)} · ${x.p.docs.length} เอกสาร${ql.length?" · "+esc(ql.join(", ")):""} ${w&&(w.k==="warn"||w.k==="bad")?`<span class="pill s-${w.k}">${w.qual?lab[w.k]:w.k==="bad"?"มีใบหมดอายุ":"ใกล้หมด"}</span>`:""}</div></div><div class="row" style="gap:6px;flex-wrap:nowrap"><button class="btn btn-soft btn-sm" data-pv="${esc(x.rec.id)}">ดูเอกสาร</button><button class="btn btn-ghost btn-sm" data-edit="${esc(x.rec.id)}">แก้ไข</button></div></div>`}).join(""):`<div class="empty">ยังไม่มีรายชื่อ กด “+ เพิ่มช่าง” เพื่อเริ่ม</div>`;
   $("#plist").querySelectorAll("[data-edit]").forEach(b=>b.onclick=()=>openEditor(ADMIN.people.find(x=>x.rec.id===b.dataset.edit)));
+  document.querySelectorAll("#console [data-pv]").forEach(b=>b.onclick=()=>openViewer(ADMIN.people.find(x=>x.rec.id===b.dataset.pv)));
 }
 document.querySelector(".seg").addEventListener("click",e=>{const b=e.target.closest("button");if(!b)return;FILTER=b.dataset.f;document.querySelectorAll(".seg button").forEach(x=>x.setAttribute("aria-pressed",x===b));renderAdmin()});
 $("#f-type").onchange=renderAdmin;$("#f-q").oninput=renderAdmin;
@@ -506,6 +508,7 @@ $("#btn-copyalert").onclick=()=>{
 };
 
 /* ---------- editor ---------- */
+function openViewer(x){if(!x)return;openSheet(`<div class="stack" id="pv"></div>`);renderMe(x.p,$("#pv"))}
 function openSheet(h){$("#sheet-box").innerHTML=h;$("#sheet").hidden=false}
 function closeSheet(){$("#sheet").hidden=true;$("#sheet-box").innerHTML=""}
 $("#sheet").addEventListener("click",e=>{if(e.target.id==="sheet")closeSheet()});
