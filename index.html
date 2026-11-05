@@ -428,6 +428,7 @@ function qualCard(e){
 function certCard(c){const st=dstatus(c);const k=st.k;return`<article class="cert">
   <div class="chead"><div class="ico s-${k}">${svg(iconKey(c.type))}</div><div class="stack" style="gap:3px"><h3>${esc(c.type)}</h3><div><span class="pill s-${k}">${st.t}</span></div></div>${countdown(st)}</div>
   <div class="facts"><span><em>เลขที่</em><b>${esc(c.no||"—")}</b></span><span><em>วันที่ออก</em><b>${thDate(c.issued)}</b></span><span><em>วันหมดอายุ</em><b>${thDate(c.expires)}</b></span></div>
+  ${c.note?`<div class="muted sm">${esc(c.note)}</div>`:""}
   ${c.file?docBtns(c,true):`<div class="muted sm">ยังไม่มีไฟล์ ติดต่อเจ้าหน้าที่ Safety</div>`}</article>`}
 function renderMe(p,box){
   REG=[];SETS=[];CURRENT={p};
