@@ -367,6 +367,8 @@ const URLS=new Map();
 function blobUrl(f){if(!URLS.has(f))URLS.set(f,URL.createObjectURL(new Blob([unb64(f.data)],{type:f.mime})));return URLS.get(f)}
 const extOf=m=>m==="application/pdf"?"pdf":m==="image/svg+xml"?"svg":"jpg";
 const isImg=d=>d&&d.file&&d.file.mime!=="application/pdf";
+const pagesOf=d=>d&&d.file?[d.file,...(d.pages||[])]:[];
+const pgTag=d=>pagesOf(d).length>1?` (${pagesOf(d).length} หน้า)`:"";
 
 /* ---------- sample data ---------- */
 function sampleSVG(title,sub,name,no,issued,expires){
@@ -420,7 +422,7 @@ function initials(n){const w=String(n).trim().split(/\s+/);return(w[0]?.[0]||"")
 const reg=d=>{REG.push(d);return REG.length-1};
 const fname=d=>esc((docTitle(d)+"_"+CURRENT.p.code).replace(/[\\/:*?"<>|\s]+/g,"_")+"."+extOf(d.file.mime));
 const docBtns=(d,full)=>{if(!d||!d.file)return"";const i=reg(d);return full
-  ?`<div class="cact"><button class="btn btn-soft" data-a="view" data-x="${i}">${ui("eye")} ดู</button><button class="btn btn-soft" data-a="print" data-x="${i}">${ui("print")} พิมพ์</button><a class="btn btn-soft" data-a="save" href="${blobUrl(d.file)}" download="${fname(d)}">${ui("save")} บันทึก</a></div><div class="viewer" id="vw-${i}" hidden></div>`
+  ?`<div class="cact"><button class="btn btn-soft" data-a="view" data-x="${i}">${ui("eye")} ดู${pgTag(d)}</button><button class="btn btn-soft" data-a="print" data-x="${i}">${ui("print")} พิมพ์</button><a class="btn btn-soft" data-a="save" href="${blobUrl(d.file)}" download="${fname(d)}">${ui("save")} บันทึก</a></div><div class="viewer" id="vw-${i}" hidden></div>`
   :`<div class="mini"><button class="btn btn-soft btn-sm" data-a="view" data-x="${i}" aria-label="ดู">${ui("eye",16)}</button><button class="btn btn-soft btn-sm" data-a="print" data-x="${i}" aria-label="พิมพ์">${ui("print",16)}</button><a class="btn btn-soft btn-sm" data-a="save" data-x="${i}" aria-label="บันทึก" href="${blobUrl(d.file)}" download="${fname(d)}">${ui("save",16)}</a></div><div class="viewer full" id="vw-${i}" hidden></div>`};
 function qualCard(e){
   const set=e.items.map(i=>i.d).filter(isImg);const si=SETS.push(set)-1;
@@ -451,20 +453,23 @@ function renderMe(p,box){
   if(!box){el.hidden=false;$("#f-me").hidden=true;scrollTo(0,0)}
   el.querySelectorAll("[data-a]").forEach(b=>b.addEventListener("click",ev=>{
     const a=b.dataset.a,i=+b.dataset.x,d=REG[i];
-    if(a==="save"){if(DEMO)toast("ถ้ากดแล้วไม่มีอะไรเกิดขึ้น ให้กดค้างที่รูปแล้วเลือกบันทึกรูป");return}
+    if(a==="save"){if(DEMO)toast("ถ้ากดแล้วไม่มีอะไรเกิดขึ้น ให้กดค้างที่รูปแล้วเลือกบันทึกรูป");if(pagesOf(d).length>1){ev.preventDefault();saveFiles([d])}return}
     ev.preventDefault();
-    if(a==="view"){const v=el.querySelector("#vw-"+i);const open=v.hidden;if(open&&!v.innerHTML)v.innerHTML=d.file.mime==="application/pdf"?`<a class="btn btn-pri" href="${blobUrl(d.file)}" target="_blank" rel="noopener">เปิดไฟล์ PDF</a>`:`<img src="${blobUrl(d.file)}" alt="${esc(docTitle(d))}">`;v.hidden=!open;b.classList.toggle("on",open)}
+    if(a==="view"){const v=el.querySelector("#vw-"+i);const open=v.hidden;const ps=pagesOf(d);if(open&&!v.innerHTML)v.innerHTML=d.file.mime==="application/pdf"?`<a class="btn btn-pri" href="${blobUrl(d.file)}" target="_blank" rel="noopener">เปิดไฟล์ PDF</a>`:`<div class="stack" style="gap:10px">${ps.map((f,k)=>`${ps.length>1?`<div class="muted sm">หน้า ${k+1}/${ps.length}</div>`:""}<img src="${blobUrl(f)}" alt="${esc(docTitle(d))} หน้า ${k+1}">`).join("")}</div>`;v.hidden=!open;b.classList.toggle("on",open)}
     if(a==="print")printDocs([d]);
   }));
   el.querySelectorAll("[data-set]").forEach(b=>b.onclick=()=>printDocs(SETS[+b.dataset.set]));
-  el.querySelectorAll("[data-saveall]").forEach(b=>b.onclick=()=>{const list=SETS[+b.dataset.saveall];list.forEach((d,k)=>setTimeout(()=>{const a=document.createElement("a");a.href=blobUrl(d.file);a.download=fname(d).replace(/&amp;/g,"&");document.body.appendChild(a);a.click();a.remove()},k*600));toast(DEMO?"หน้าตัวอย่างบันทึกไม่ได้ ใช้ได้บนเว็บจริง":"กำลังบันทึก "+list.length+" ไฟล์ ถ้าเบราว์เซอร์ถาม ให้กดอนุญาต")});
+  el.querySelectorAll("[data-saveall]").forEach(b=>b.onclick=()=>saveFiles(SETS[+b.dataset.saveall]));
   el.querySelector(".btn-out").onclick=box?closeSheet:()=>{el.hidden=true;el.innerHTML="";$("#f-me").hidden=false;$("#in-code").value="";$("#in-code").focus()};
 }
+function saveFiles(list){const jobs=[];list.forEach(d=>{const ps=pagesOf(d);ps.forEach((f,k)=>{const n=fname(d).replace(/&amp;/g,"&");jobs.push([f,ps.length>1?n.replace(/(\.[a-z]+)$/,"_หน้า"+(k+1)+"$1"):n])})});
+  jobs.forEach(([f,n],k)=>setTimeout(()=>{const a=document.createElement("a");a.href=blobUrl(f);a.download=n;document.body.appendChild(a);a.click();a.remove()},k*600));
+  toast(DEMO?"หน้าตัวอย่างบันทึกไม่ได้ ใช้ได้บนเว็บจริง":"กำลังบันทึก "+jobs.length+" ไฟล์ ถ้าเบราว์เซอร์ถาม ให้กดอนุญาต")}
 function printDocs(list){
   if(list.length===1&&list[0].file.mime==="application/pdf"){window.open(blobUrl(list[0].file),"_blank");toast("เปิดไฟล์ PDF แล้ว สั่งพิมพ์จากหน้าที่เปิดขึ้นมา");return}
   list=list.filter(isImg);if(!list.length)return;
   const p=CURRENT.p,stamp=new Date().toLocaleDateString("th-TH",{day:"numeric",month:"short",year:"numeric"});
-  $("#print-area").innerHTML=list.map(d=>`<div class="pp"><img src="${blobUrl(d.file)}" alt=""><div class="cap">${esc(p.name)} · ${esc(p.code)} · ${esc(docTitle(d))} · เลขที่ ${esc(d.no||"-")} · หมดอายุ ${d.expires?thDate(d.expires):"ไม่มี"}<br>พิมพ์จากระบบ Cert ช่างหน้างาน เมื่อ ${stamp}</div></div>`).join("");
+  $("#print-area").innerHTML=list.flatMap(d=>pagesOf(d).map((f,k,ps)=>[d,f,k,ps.length])).map(([d,f,k,n])=>`<div class="pp"><img src="${blobUrl(f)}" alt=""><div class="cap">${esc(p.name)} · ${esc(p.code)} · ${esc(docTitle(d))}${n>1?` · หน้า ${k+1}/${n}`:""} · เลขที่ ${esc(d.no||"-")} · หมดอายุ ${d.expires?thDate(d.expires):"ไม่มี"}<br>พิมพ์จากระบบ Cert ช่างหน้างาน เมื่อ ${stamp}</div></div>`).join("");
   const imgs=[...$("#print-area").querySelectorAll("img")];
   Promise.all(imgs.map(i=>i.complete?1:new Promise(r=>{i.onload=i.onerror=r}))).then(()=>{imgs.forEach(i=>{if(i.naturalWidth>i.naturalHeight)i.closest(".pp").classList.add("land")});try{window.print()}catch{}if(DEMO)toast("หน้าตัวอย่างนี้สั่งพิมพ์ไม่ได้ ปุ่มพิมพ์จะใช้ได้บนเว็บจริง")});
 }
@@ -519,8 +524,17 @@ function openViewer(x){if(!x)return;openSheet(`<div class="stack" id="pv"></div>
 function openSheet(h){$("#sheet-box").innerHTML=h;$("#sheet").hidden=false}
 function closeSheet(){$("#sheet").hidden=true;$("#sheet-box").innerHTML=""}
 $("#sheet").addEventListener("click",e=>{if(e.target.id==="sheet")closeSheet()});
+let PDFJS=null;
+async function loadPdfJs(){if(PDFJS)return PDFJS;await new Promise((r,j)=>{const s=document.createElement("script");s.src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";s.onload=r;s.onerror=()=>j(new Error("โหลดตัวอ่าน PDF ไม่สำเร็จ ตรวจอินเทอร์เน็ตแล้วลองใหม่"));document.head.appendChild(s)});
+  window.pdfjsLib.GlobalWorkerOptions.workerSrc="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";PDFJS=window.pdfjsLib;return PDFJS}
+function canvasToStored(c,name){return{mime:"image/jpeg",name,data:c.toDataURL("image/jpeg",0.75).split(",")[1]}}
+async function pdfToPages(file){const lib=await loadPdfJs();const doc=await lib.getDocument({data:new Uint8Array(await file.arrayBuffer())}).promise;const out=[];
+  for(let n=1;n<=Math.min(doc.numPages,20);n++){const pg=await doc.getPage(n);const v0=pg.getViewport({scale:1});const sc=Math.min(2.5,1500/Math.max(v0.width,v0.height));const v=pg.getViewport({scale:sc});
+    const c=document.createElement("canvas");c.width=Math.round(v.width);c.height=Math.round(v.height);const g=c.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,c.width,c.height);await pg.render({canvasContext:g,viewport:v}).promise;out.push(canvasToStored(c,file.name+"_p"+n))}
+  return out}
+async function filesToPages(files){let out=[];for(const f of files){if(f.type==="application/pdf")out=out.concat(await pdfToPages(f));else out.push(await fileToStored(f))}return out}
 async function fileToStored(file){
-  if(file.type==="application/pdf"){if(file.size>2.5e6)throw new Error("ไฟล์ PDF ใหญ่เกิน 2.5 MB ให้ส่งเป็นรูปถ่าย/สแกนเป็น JPG แทน หรือสแกนความละเอียดต่ำลง");return{mime:"application/pdf",name:file.name,data:b64(await file.arrayBuffer())}}
+  if(file.type==="application/pdf"){return(await pdfToPages(file))[0]}
   if(file.type.startsWith("image/")){const u=URL.createObjectURL(file);const img=new Image();await new Promise((r,j)=>{img.onload=r;img.onerror=j;img.src=u});const sc=Math.min(1,1500/Math.max(img.width,img.height));const c=document.createElement("canvas");c.width=Math.round(img.width*sc);c.height=Math.round(img.height*sc);const g=c.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,c.width,c.height);g.drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(u);return{mime:"image/jpeg",name:file.name,data:c.toDataURL("image/jpeg",0.75).split(",")[1]}}
   throw new Error("รองรับเฉพาะไฟล์รูปภาพหรือ PDF");
 }
@@ -535,7 +549,7 @@ function openEditor(x){
     ${d.kind==="cert"&&d.qual==="general"?`<label>หลักสูตร${sel("type",GTYPES.map(t=>[t,t]).concat(GTYPES.includes(d.type)||!d.type?[]:[[d.type,d.type]]),d.type)}</label>`:""}
     <div class="grid2"><label>เลขที่เอกสาร<input data-k="no" value="${esc(d.no)}" class="mono"></label><label>หมายเหตุ <small>เช่น ข้อจำกัดจากแพทย์</small><input data-k="note" value="${esc(d.note||"")}"></label></div>
     <div class="grid2"><label>วันที่ออก${d.kind==="cert"?" / วันสุดท้ายที่อบรม":""}<input type="date" data-k="issued" value="${esc(d.issued)}"></label><label>วันหมดอายุ <small>${expHint(d)}</small><input type="date" data-k="expires" value="${esc(d.expires)}"></label></div>
-    <label>ไฟล์ <small>${d.file?"มีไฟล์แล้ว (เลือกใหม่เพื่อแทนที่)":"รูปถ่ายหรือ PDF"}</small><input type="file" data-k="file" accept="image/*,application/pdf"></label></div>`;
+    <label>ไฟล์ <small>${d.file?"มีไฟล์แล้ว "+pagesOf(d).length+" หน้า (เลือกใหม่เพื่อแทนที่)":"รูปถ่ายหรือ PDF เลือกได้หลายไฟล์ = หลายหน้า"}</small><input type="file" data-k="file" accept="image/*,application/pdf" multiple></label></div>`;
   function draw(){
     openSheet(`<form id="ed" class="stack" autocomplete="off"><div class="row between"><h2>${isNew?"เพิ่มช่างใหม่":"แก้ไขข้อมูล"}</h2><button type="button" class="btn btn-ghost btn-sm" id="ed-x">ปิด</button></div>
     <label>รหัสพนักงาน / รหัสผู้รับเหมา <small>ช่างใช้รหัสนี้เปิดดูเอกสาร</small><input id="ed-code" class="mono" style="text-transform:uppercase" value="${esc(p.code)}" ${isNew?"required":"disabled"}></label>
@@ -554,7 +568,7 @@ function openEditor(x){
       is.addEventListener("change",()=>{const n=autoYears(d);if(n&&is.value&&(!ex.value||d._auto)){ex.value=addYears(is.value,n);d._auto=1}});
       ex.addEventListener("input",()=>{delete d._auto});
     });
-    box.querySelectorAll("[data-k=file]").forEach(f=>f.onchange=async()=>{const d=p.docs[+f.closest(".ced").dataset.i];try{d.file=await fileToStored(f.files[0]);f.parentElement.querySelector("small").textContent="เลือกแล้ว: "+f.files[0].name}catch(err){setMsg("#ed-msg",err.message);f.value=""}});
+    box.querySelectorAll("[data-k=file]").forEach(f=>f.onchange=async()=>{const d=p.docs[+f.closest(".ced").dataset.i];const sm=f.parentElement.querySelector("small");sm.textContent="กำลังแปลงไฟล์…";try{const ps=await filesToPages([...f.files]);if(!ps.length)throw new Error("ไม่พบหน้าเอกสาร");d.file=ps[0];d.pages=ps.slice(1);sm.textContent="เลือกแล้ว "+ps.length+" หน้า"}catch(err){sm.textContent="";setMsg("#ed-msg",err.message);f.value=""}});
     box.querySelectorAll("[data-rm]").forEach(b=>b.onclick=()=>{sync();p.docs.splice(+b.dataset.rm,1);draw()});
     $("#ed-addc").onclick=()=>{sync();p.docs.push({kind:"cert",qual:"general",type:GTYPES[0],no:"",issued:"",expires:"",file:null});draw()};
     if(!isNew){const d=$("#ed-del");d.onclick=()=>{if(d.dataset.sure){DB.records=DB.records.filter(r=>r!==x.rec);ADMIN.people=ADMIN.people.filter(y=>y!==x);markDirty();closeSheet();renderAdmin();toast("ลบแล้ว")}else{d.dataset.sure=1;d.textContent="กดอีกครั้งเพื่อยืนยันการลบ"}}}
@@ -577,9 +591,9 @@ $("#btn-add").onclick=()=>openEditor(null);
 /* ---------- data file ---------- */
 function markDirty(){DIRTY=true;DB.updated=new Date().toISOString();$("#dirty").hidden=false}
 const fileOf=rec=>"d/"+rec.id.slice(0,20)+".json";
-async function shrinkImages(x){let changed=false;for(const d of x.p.docs){const f=d.file;if(!f||!/^image\/(jpeg|png|webp)/.test(f.mime)||f.data.length<560000)continue;
+async function shrinkImages(x){let changed=false;for(const d of x.p.docs){for(const [pi,f] of pagesOf(d).entries()){if(!f||!/^image\/(jpeg|png|webp)/.test(f.mime)||f.data.length<560000)continue;
   try{const img=new Image();const u=URL.createObjectURL(new Blob([unb64(f.data)],{type:f.mime}));await new Promise((r,j)=>{img.onload=r;img.onerror=j;img.src=u});const sc=Math.min(1,1500/Math.max(img.width,img.height));const c=document.createElement("canvas");c.width=Math.round(img.width*sc);c.height=Math.round(img.height*sc);const g=c.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,c.width,c.height);g.drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(u);
-  const nd=c.toDataURL("image/jpeg",0.75).split(",")[1];if(nd.length<f.data.length){d.file={mime:"image/jpeg",name:f.name,data:nd};changed=true}}catch{}}
+  const nd=c.toDataURL("image/jpeg",0.75).split(",")[1];if(nd.length<f.data.length){const nf={mime:"image/jpeg",name:f.name,data:nd};if(pi===0)d.file=nf;else d.pages[pi-1]=nf;changed=true}}catch{}}}
   if(changed)await rewritePayload(x.rec,x.dk,x.p);return changed}
 async function download(){
   if(DEMO){toast("หน้าตัวอย่างดาวน์โหลดไม่ได้ ใช้ได้บนเว็บจริง");return}
