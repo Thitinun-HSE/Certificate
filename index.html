@@ -177,6 +177,9 @@ textarea{font:12px var(--mono);height:130px}
   .pp{break-after:page;page-break-after:always;display:flex;flex-direction:column;gap:6mm}
   .pp:last-child{break-after:auto;page-break-after:auto}
   .pp img{width:100%;max-height:235mm;object-fit:contain;border:0}
+  @page land{size:A4 landscape;margin:10mm}
+  .pp.land{page:land}
+  .pp.land img{max-height:165mm}
   .pp .cap{font:11pt "IBM Plex Sans Thai",sans-serif;color:#333;border-top:1px solid #999;padding-top:3mm}
 }
 </style>
@@ -256,10 +259,9 @@ textarea{font:12px var(--mono);height:130px}
 
       <div class="card stack" style="margin-top:8px">
         <h3>ไฟล์ข้อมูล</h3>
-        <p class="muted" style="margin:0;font-size:.9rem">แก้ไขเสร็จ ให้ดาวน์โหลด <span class="mono">data.json</span> แล้วอัปโหลดทับไฟล์เดิมใน GitHub ข้อมูลในไฟล์ถูกเข้ารหัส คนนอกเปิดอ่านไม่ได้</p>
+        <p class="muted" style="margin:0;font-size:.9rem">แก้ไขเสร็จ กดดาวน์โหลดชุดไฟล์ แตก zip แล้วอัป <span class="mono">data.json</span> กับโฟลเดอร์ <span class="mono">d</span> ทับของเดิมใน GitHub ข้อมูลแยกเป็นไฟล์ละคน ไม่ติดขนาด 25 MB</p>
         <div class="row">
-          <button class="btn btn-soft btn-sm" id="btn-dl">ดาวน์โหลด data.json</button>
-          <button class="btn btn-soft btn-sm" id="btn-copyjson">คัดลอก JSON</button>
+          <button class="btn btn-pri btn-sm" id="btn-dl">ดาวน์โหลดชุดไฟล์ (.zip)</button>
           <button class="btn btn-soft btn-sm" id="btn-pw">เปลี่ยนรหัสผ่านผู้ดูแล</button>
           <label class="btn btn-soft btn-sm" style="flex-direction:row">นำเข้า data.json<input type="file" id="in-import" accept=".json,application/json" hidden></label>
         </div>
@@ -272,11 +274,12 @@ textarea{font:12px var(--mono);height:130px}
 </main>
 </div>
 
-<div class="dirty screen gut" id="dirty" hidden><div class="in"><span>มีการแก้ไขที่ยังไม่ได้อัปขึ้น GitHub</span><div class="row"><button class="btn btn-hv btn-sm" id="btn-dl2">ดาวน์โหลด data.json</button><button class="btn btn-ghost btn-sm" id="btn-copyjson2">คัดลอก JSON</button></div></div></div>
+<div class="dirty screen gut" id="dirty" hidden><div class="in"><span>มีการแก้ไขที่ยังไม่ได้อัปขึ้น GitHub</span><div class="row"><button class="btn btn-hv btn-sm" id="btn-dl2">ดาวน์โหลดชุดไฟล์ (.zip)</button></div></div></div>
 <div class="sheet screen" id="sheet" hidden><div class="box" id="sheet-box"></div></div>
 <div class="toast screen" id="toast" hidden></div>
 <div class="print-only" id="print-area"></div>
 
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
 <script>
 const enc=new TextEncoder(),dec=new TextDecoder();
 const $=s=>document.querySelector(s);
@@ -328,6 +331,8 @@ async function makeRecord(code,payload,adminKey){
   const rec={id:await idFor(code),salt,wk:await seal(await workerKey(code,salt),dk),ak:await seal(adminKey,dk),data:await seal(await rawKey(dk),enc.encode(clean(payload)))};
   return{rec,dk};
 }
+const DCACHE=new Map();
+async function getData(rec){if(rec.data)return rec.data;if(DCACHE.has(rec.id))return DCACHE.get(rec.id);const r=await fetch(rec.f+"?v="+encodeURIComponent(DB.updated||""),{cache:"no-store"});if(!r.ok)throw new Error("โหลดไฟล์ข้อมูลไม่สำเร็จ");const d=(await r.json()).data;DCACHE.set(rec.id,d);return d}
 async function rewritePayload(rec,dk,payload){rec.data=await seal(await rawKey(dk),enc.encode(clean(payload)))}
 async function newDB(password){const salt=b64(crypto.getRandomValues(new Uint8Array(16)));const db={format:"nt-cert-v1",iter:ITER,updated:new Date().toISOString(),admin:{salt},records:[]};const key=await deriveKey(password,unb64(salt),ITER);db.admin.check=await seal(key,enc.encode("ok"));return{db,key}}
 function normalize(p){if(!p.docs){p.docs=(p.certs||[]).map(c=>({kind:"cert",qual:/อับอากาศ/.test(c.type)?"confined":"general",...c}));delete p.certs}return p}
@@ -407,7 +412,7 @@ $("#f-me").addEventListener("submit",async e=>{
     const id=await idFor(code);const rec=DB.records.find(r=>r.id===id);
     if(!rec){setMsg("#me-msg","ไม่พบรหัสนี้ ลองพิมพ์ใหม่อีกครั้ง หรือแจ้งเจ้าหน้าที่ Safety");return}
     const dk=await unseal(await workerKey(code,rec.salt),rec.wk);
-    renderMe(normalize(JSON.parse(dec.decode(await unseal(await rawKey(dk),rec.data)))));
+    renderMe(normalize(JSON.parse(dec.decode(await unseal(await rawKey(dk),await getData(rec))))));
   }catch(err){setMsg("#me-msg","เปิดข้อมูลไม่สำเร็จ ลองรีเฟรชหน้าแล้วกรอกใหม่")}
   finally{btn.disabled=false;btn.textContent="ดู Cert ของฉัน"}
 });
@@ -461,7 +466,7 @@ function printDocs(list){
   const p=CURRENT.p,stamp=new Date().toLocaleDateString("th-TH",{day:"numeric",month:"short",year:"numeric"});
   $("#print-area").innerHTML=list.map(d=>`<div class="pp"><img src="${blobUrl(d.file)}" alt=""><div class="cap">${esc(p.name)} · ${esc(p.code)} · ${esc(docTitle(d))} · เลขที่ ${esc(d.no||"-")} · หมดอายุ ${d.expires?thDate(d.expires):"ไม่มี"}<br>พิมพ์จากระบบ Cert ช่างหน้างาน เมื่อ ${stamp}</div></div>`).join("");
   const imgs=[...$("#print-area").querySelectorAll("img")];
-  Promise.all(imgs.map(i=>i.complete?1:new Promise(r=>{i.onload=i.onerror=r}))).then(()=>{try{window.print()}catch{}if(DEMO)toast("หน้าตัวอย่างนี้สั่งพิมพ์ไม่ได้ ปุ่มพิมพ์จะใช้ได้บนเว็บจริง")});
+  Promise.all(imgs.map(i=>i.complete?1:new Promise(r=>{i.onload=i.onerror=r}))).then(()=>{imgs.forEach(i=>{if(i.naturalWidth>i.naturalHeight)i.closest(".pp").classList.add("land")});try{window.print()}catch{}if(DEMO)toast("หน้าตัวอย่างนี้สั่งพิมพ์ไม่ได้ ปุ่มพิมพ์จะใช้ได้บนเว็บจริง")});
 }
 
 /* ---------- admin ---------- */
@@ -472,7 +477,8 @@ $("#f-login").addEventListener("submit",async e=>{
   finally{btn.disabled=false;btn.textContent="เข้าสู่ระบบ"}
 });
 async function loadAdmin(key){
-  const people=[];for(const rec of DB.records){try{const dk=await unseal(key,rec.ak);const p=normalize(JSON.parse(dec.decode(await unseal(await rawKey(dk),rec.data))));people.push({rec,dk,p})}catch{}}
+  const btn=$("#btn-login");const people=[];let n=0;
+  await Promise.all(DB.records.map(async rec=>{try{const dk=await unseal(key,rec.ak);const p=normalize(JSON.parse(dec.decode(await unseal(await rawKey(dk),await getData(rec)))));people.push({rec,dk,p})}catch{}btn.textContent="กำลังโหลด "+(++n)+"/"+DB.records.length}));
   ADMIN={key,people};$("#f-login").hidden=true;$("#foot-login").hidden=true;$("#console").hidden=false;$("#in-admin").value="";renderAdmin();
 }
 $("#btn-logout").onclick=()=>{ADMIN=null;$("#console").hidden=true;$("#f-login").hidden=false;$("#foot-login").hidden=false};
@@ -514,8 +520,8 @@ function openSheet(h){$("#sheet-box").innerHTML=h;$("#sheet").hidden=false}
 function closeSheet(){$("#sheet").hidden=true;$("#sheet-box").innerHTML=""}
 $("#sheet").addEventListener("click",e=>{if(e.target.id==="sheet")closeSheet()});
 async function fileToStored(file){
-  if(file.type==="application/pdf"){if(file.size>4e6)throw new Error("ไฟล์ PDF ใหญ่เกิน 4 MB ลองสแกนความละเอียดต่ำลง");return{mime:"application/pdf",name:file.name,data:b64(await file.arrayBuffer())}}
-  if(file.type.startsWith("image/")){const u=URL.createObjectURL(file);const img=new Image();await new Promise((r,j)=>{img.onload=r;img.onerror=j;img.src=u});const sc=Math.min(1,1800/Math.max(img.width,img.height));const c=document.createElement("canvas");c.width=Math.round(img.width*sc);c.height=Math.round(img.height*sc);const g=c.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,c.width,c.height);g.drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(u);return{mime:"image/jpeg",name:file.name,data:c.toDataURL("image/jpeg",0.85).split(",")[1]}}
+  if(file.type==="application/pdf"){if(file.size>2.5e6)throw new Error("ไฟล์ PDF ใหญ่เกิน 2.5 MB ให้ส่งเป็นรูปถ่าย/สแกนเป็น JPG แทน หรือสแกนความละเอียดต่ำลง");return{mime:"application/pdf",name:file.name,data:b64(await file.arrayBuffer())}}
+  if(file.type.startsWith("image/")){const u=URL.createObjectURL(file);const img=new Image();await new Promise((r,j)=>{img.onload=r;img.onerror=j;img.src=u});const sc=Math.min(1,1500/Math.max(img.width,img.height));const c=document.createElement("canvas");c.width=Math.round(img.width*sc);c.height=Math.round(img.height*sc);const g=c.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,c.width,c.height);g.drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(u);return{mime:"image/jpeg",name:file.name,data:c.toDataURL("image/jpeg",0.75).split(",")[1]}}
   throw new Error("รองรับเฉพาะไฟล์รูปภาพหรือ PDF");
 }
 function expHint(d){if(d.kind==="appoint")return"เว้นว่าง = ใช้ได้จนกว่าจะเปลี่ยนตำแหน่ง";if(d.kind==="medical")return"ตามแพทย์ระบุ ถ้าไม่ระบุนับ 1 ปี (เกณฑ์บริษัท)";if(QUALS[d.qual])return"คำนวณให้ "+QUALS[d.qual].renew+" ปี ตามกฎหมาย";return"เว้นว่างถ้าไม่มีวันหมด"}
@@ -560,7 +566,7 @@ function openEditor(x){
       try{
         if(isNew){const{rec,dk}=await makeRecord(p.code,p,ADMIN.key);DB.records.push(rec);ADMIN.people.push({rec,dk,p})}
         else{await rewritePayload(x.rec,x.dk,p);x.p=p}
-        markDirty();closeSheet();renderAdmin();toast("บันทึกแล้ว อย่าลืมดาวน์โหลด data.json");
+        markDirty();closeSheet();renderAdmin();toast("บันทึกแล้ว อย่าลืมดาวน์โหลดชุดไฟล์");
       }catch(err){setMsg("#ed-msg","บันทึกไม่สำเร็จ: "+err.message);btn.disabled=false;btn.textContent="บันทึก"}
     });
   }
@@ -570,10 +576,32 @@ $("#btn-add").onclick=()=>openEditor(null);
 
 /* ---------- data file ---------- */
 function markDirty(){DIRTY=true;DB.updated=new Date().toISOString();$("#dirty").hidden=false}
+const fileOf=rec=>"d/"+rec.id.slice(0,20)+".json";
+async function shrinkImages(x){let changed=false;for(const d of x.p.docs){const f=d.file;if(!f||!/^image\/(jpeg|png|webp)/.test(f.mime)||f.data.length<560000)continue;
+  try{const img=new Image();const u=URL.createObjectURL(new Blob([unb64(f.data)],{type:f.mime}));await new Promise((r,j)=>{img.onload=r;img.onerror=j;img.src=u});const sc=Math.min(1,1500/Math.max(img.width,img.height));const c=document.createElement("canvas");c.width=Math.round(img.width*sc);c.height=Math.round(img.height*sc);const g=c.getContext("2d");g.fillStyle="#fff";g.fillRect(0,0,c.width,c.height);g.drawImage(img,0,0,c.width,c.height);URL.revokeObjectURL(u);
+  const nd=c.toDataURL("image/jpeg",0.75).split(",")[1];if(nd.length<f.data.length){d.file={mime:"image/jpeg",name:f.name,data:nd};changed=true}}catch{}}
+  if(changed)await rewritePayload(x.rec,x.dk,x.p);return changed}
+async function download(){
+  if(DEMO){toast("หน้าตัวอย่างดาวน์โหลดไม่ได้ ใช้ได้บนเว็บจริง");return}
+  if(!ADMIN){toast("เข้าสู่ระบบเจ้าหน้าที่ก่อน");return}
+  if(!window.JSZip){toast("โหลดตัวสร้างไฟล์ zip ไม่สำเร็จ ตรวจอินเทอร์เน็ตแล้วลองใหม่");return}
+  const bs=[$("#btn-dl"),$("#btn-dl2")];bs.forEach(b=>{b.disabled=true;b.textContent="กำลังเตรียมไฟล์…"});
+  try{
+    for(const x of ADMIN.people)await shrinkImages(x);
+    const zip=new JSZip();const idx={format:"nt-cert-v1",split:true,iter:DB.iter,updated:new Date().toISOString(),admin:DB.admin,records:[]};
+    let big=[];
+    for(const rec of DB.records){const data=await getData(rec);const f=fileOf(rec);const body=JSON.stringify({data});if(body.length>24e6)big.push(f);zip.file(f,body);idx.records.push({id:rec.id,salt:rec.salt,wk:rec.wk,ak:rec.ak,f})}
+    zip.file("data.json",JSON.stringify(idx));
+    const blob=await zip.generateAsync({type:"blob"});
+    const a=document.createElement("a");a.href=URL.createObjectURL(blob);a.download="cert-data.zip";document.body.appendChild(a);a.click();a.remove();
+    DIRTY=false;$("#dirty").hidden=true;
+    toast(big.length?"มีบางคนไฟล์ใหญ่เกิน 24 MB แจ้งพี่บู้บี้ด้วย":"ดาวน์โหลดแล้ว แตก zip แล้วอัป data.json กับโฟลเดอร์ d ขึ้น GitHub");
+  }catch(err){toast("สร้างไฟล์ไม่สำเร็จ: "+err.message)}
+  finally{bs.forEach(b=>{b.disabled=false;b.textContent="ดาวน์โหลดชุดไฟล์ (.zip)"})}
+}
 const json=()=>JSON.stringify(DB);
-function download(){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([json()],{type:"application/json"}));a.download="data.json";document.body.appendChild(a);a.click();a.remove();DIRTY=false;$("#dirty").hidden=true;toast(DEMO?"หน้าตัวอย่างดาวน์โหลดไม่ได้ ใช้ได้บนเว็บจริง":"ดาวน์โหลดแล้ว นำไปอัปโหลดทับใน GitHub")}
+function downloadOld(){const a=document.createElement("a");a.href=URL.createObjectURL(new Blob([json()],{type:"application/json"}));a.download="data.json";document.body.appendChild(a);a.click();a.remove();DIRTY=false;$("#dirty").hidden=true;toast(DEMO?"หน้าตัวอย่างดาวน์โหลดไม่ได้ ใช้ได้บนเว็บจริง":"ดาวน์โหลดแล้ว นำไปอัปโหลดทับใน GitHub")}
 $("#btn-dl").onclick=$("#btn-dl2").onclick=download;
-$("#btn-copyjson").onclick=$("#btn-copyjson2").onclick=()=>copyText(json(),"คัดลอก JSON แล้ว");
 $("#in-import").onchange=async e=>{try{const j=JSON.parse(await e.target.files[0].text());if(j.format!=="nt-cert-v1")throw 0;DB=j;DEMO=false;ADMIN=null;$("#console").hidden=true;$("#f-login").hidden=false;$("#foot-login").hidden=false;$("#demo-me").hidden=true;$("#demo-admin").hidden=true;toast("นำเข้าแล้ว เข้าสู่ระบบอีกครั้ง")}catch{toast("ไฟล์นี้ไม่ใช่ data.json ของระบบ")}e.target.value=""};
 $("#btn-newdb").onclick=()=>{
   openSheet(`<form id="nd" class="stack"><h2>เริ่มฐานข้อมูลใหม่</h2><p class="muted" style="margin:0">ข้อมูลที่เปิดอยู่จะถูกแทนที่ด้วยฐานข้อมูลว่าง จดรหัสผ่านนี้เก็บไว้ ถ้าลืมจะแก้ไขข้อมูลไม่ได้</p>
@@ -584,14 +612,14 @@ $("#btn-newdb").onclick=()=>{
   $("#nd").onsubmit=async e=>{e.preventDefault();if($("#nd-1").value!==$("#nd-2").value){setMsg("#nd-msg","รหัสผ่านสองช่องไม่ตรงกัน");return}const{db,key}=await newDB($("#nd-1").value);DB=db;DEMO=false;$("#demo-me").hidden=true;$("#demo-admin").hidden=true;closeSheet();await loadAdmin(key);markDirty();toast("สร้างฐานข้อมูลแล้ว")};
 };
 $("#btn-pw").onclick=()=>{
-  openSheet(`<form id="pw" class="stack"><h2>เปลี่ยนรหัสผ่านผู้ดูแล</h2><p class="muted" style="margin:0">เปลี่ยนแล้วต้องดาวน์โหลด data.json ไปอัปทับใน GitHub รหัสใหม่ถึงจะใช้ได้บนเว็บ จดรหัสเก็บไว้ให้ดี</p>
+  openSheet(`<form id="pw" class="stack"><h2>เปลี่ยนรหัสผ่านผู้ดูแล</h2><p class="muted" style="margin:0">เปลี่ยนแล้วต้องดาวน์โหลดชุดไฟล์ไปอัปทับใน GitHub รหัสใหม่ถึงจะใช้ได้บนเว็บ จดรหัสเก็บไว้ให้ดี</p>
   <label>รหัสผ่านใหม่ <small>อย่างน้อย 8 ตัว</small><input type="password" id="pw-1" minlength="8" required></label>
   <label>ยืนยันรหัสผ่านใหม่<input type="password" id="pw-2" required></label><div id="pw-msg" hidden></div>
   <div class="row"><button class="btn btn-pri" type="submit" id="pw-go">เปลี่ยนรหัสผ่าน</button><button class="btn btn-ghost" type="button" id="pw-x">ยกเลิก</button></div></form>`);
   $("#pw-x").onclick=closeSheet;
   $("#pw").onsubmit=async e=>{e.preventDefault();if($("#pw-1").value!==$("#pw-2").value){setMsg("#pw-msg","รหัสผ่านสองช่องไม่ตรงกัน");return}
     $("#pw-go").disabled=true;const salt=b64(crypto.getRandomValues(new Uint8Array(16)));const key=await deriveKey($("#pw-1").value,unb64(salt),DB.iter);
-    for(const x of ADMIN.people)x.rec.ak=await seal(key,x.dk);DB.admin={salt,check:await seal(key,enc.encode("ok"))};ADMIN.key=key;markDirty();closeSheet();toast("เปลี่ยนรหัสผ่านแล้ว ดาวน์โหลด data.json ไปอัปทับได้เลย")};
+    for(const x of ADMIN.people)x.rec.ak=await seal(key,x.dk);DB.admin={salt,check:await seal(key,enc.encode("ok"))};ADMIN.key=key;markDirty();closeSheet();toast("เปลี่ยนรหัสผ่านแล้ว ดาวน์โหลดชุดไฟล์ไปอัปทับได้เลย")};
 };
 window.addEventListener("beforeunload",e=>{if(DIRTY){e.preventDefault();e.returnValue=""}});
 boot();
